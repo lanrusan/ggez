@@ -1,13 +1,26 @@
-from enum import Enum
 import tkinter as tk
 
-from grid import Grid, Tile
+from grid import Grid, Position, Tile
 
 
-class Mode(Enum):
-    Editing = 0
-    Animating = 1
-    Finished = 2
+class Editing:
+    pass
+
+
+class Animating:
+    def __init__(self, visited: list[Position], path: list[Position] | None) -> None:
+        self.visited: list[Position] = visited
+        self.path: list[Position] | None = path
+        self.current: int = 0
+
+
+class Finished:
+    def __init__(self, visited: list[Position], path: list[Position] | None) -> None:
+        self.visited: list[Position] = visited
+        self.path: list[Position] | None = path
+
+
+type Mode = Editing | Animating | Finished
 
 
 class GridGuide:
@@ -17,7 +30,7 @@ class GridGuide:
         self.root: tk.Tk = root
         self.grid_scale: int = grid_scale
         self.grid: Grid = Grid(width, height, Tile.Path)
-        self.mode: Mode = Mode.Editing
+        self.mode: Mode = Editing()
 
         self.setup_ui()
 
