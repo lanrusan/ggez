@@ -78,7 +78,38 @@ class GridGuide:
         pass
 
     def _setup_bottom_toolbar(self, frame: Frame) -> None:
-        pass
+        start_button: Button = Button(frame, text="Start", command=self._start_algorithm)
+
+        pause_button = Button(frame, text="Pause", command=self._pause_algorithm)
+
+        stop_button: Button = Button(frame, text="Stop", command=self._stop_algorithm)
+
+        step_button: Button = Button(frame, text="Step", command=self._step_algorithm)
+
+        reset_button = Button(frame, text="Reset Animation", command=self._reset_animation)
+
+        for widget in [start_button, pause_button, stop_button, step_button, reset_button]:
+            widget.pack(side=tk.LEFT, padx=5, pady=5)
+
+    def _start_algorithm(self) -> None:
+        print("Start button pressed")
+
+
+    def _pause_algorithm(self) -> None:
+        print("Pause button pressed")
+
+
+    def _stop_algorithm(self) -> None:
+        print("Stop button pressed")
+
+
+    def _step_algorithm(self) -> None:
+        print("Step button pressed")
+
+
+    def _reset_animation(self) -> None:
+        print("Reset animation")
+        self.mode = Editing()
 
     def _setup_canvas(self, canvas: Canvas) -> None:
         pass
