@@ -1,5 +1,6 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import override
 
 from grid import Grid, Position
 
@@ -11,5 +12,12 @@ class SearchResult:
 
 
 class Solver(ABC):
+    @abstractmethod
+    def solve(self, grid: Grid, start: Position, end: Position) -> SearchResult:
+        raise NotImplementedError()
+
+
+class AStar(Solver):
+    @override
     def solve(self, grid: Grid, start: Position, end: Position) -> SearchResult:
         raise NotImplementedError()
