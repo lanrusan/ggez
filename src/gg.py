@@ -39,7 +39,11 @@ class GridGuide:
         self.grid: Grid = Grid(width, height, Tile.Path)
         self.mode: Mode = Editing()
         self.solver: Solver = AStar()
-
+        self.start: Position | None=None
+        self.end: Position | None=None
+        self.undo_stack = []
+        self.redo_stack = []
+        
         top_toolbar_frame: Frame = Frame(self.root)
         top_toolbar_frame.grid(column=0, row=0, sticky="nw")
         self._setup_top_toolbar(top_toolbar_frame)
@@ -55,8 +59,11 @@ class GridGuide:
         width = self.grid.width * self.cell_size
         height = self.grid.height * self.cell_size
         self.canvas: Canvas = Canvas(self.root, width=width, height=height)
-        # canvas.grid(column=0, row=1)
+        self.canvas.grid(column=0, row=1)
         self._setup_canvas()
+        self.canvas.bind("<Button-1>", self.start_button)
+        self.canvas.bind("<Button-3>", self.end_button)
+        self.canvas.bind("<B1-Motion>", self.wall_drag)
 
     def _setup_top_toolbar(self, frame: Frame) -> None:
         def import_file() -> None:
@@ -78,8 +85,133 @@ class GridGuide:
         for widget in [import_button, export_button]:
             widget.pack(side=tk.LEFT, padx=2, pady=2)
 
+    def save_stat(self):
+        state= (
+            self.grid_tiles.copy(),
+            self.start,
+            self.end
+        )
+        self.undo_stack.append(state)
+        self.redo_stack.clear()
+    def restore_state(self, state):
+        tiles, start, end= state
+        self.grid._tiles = tiles
+        self.start = start
+        self.end = end
+        self.draw_grid()
+    def undo(self):
+        if not self.undo_stack:
+            return
+        current = (
+            self.grid._tiles.copy(),
+            self.start,
+            self.end
+        )
+        self.redo_stack.append(current)
+        state = self.undo_stack.pop()
+        self.restore_state(state) 
+
+    def redo(self):
+        if not self.redo_stack:
+            return
+        current = (
+            self.grid._tiles.copy(),
+            self.start,
+            self.end
+        )
+        self.undo_stack.append(current)
+
+        state = self.redo_stack.pop()
+        self.restore_state(state)
+
+    def cursor_location(self, x, y):
+        x_pos = x // self.cell_size
+        y_pos = y // self.cell_size
+
+        return Position(x_pos, y_pos)
+    
+    def start_button(self, click):
+        pos = self.cursor_location(click.x, click.y)
+        index = self.grid.get_index(pos)
+
+        if index is None:
+            return
+
+        self.grid.set_tile(index, Tile.Wall)
+        self.draw_grid()
+
+    def wall_drag(self, click):
+        pos = self.cursor_location(click.x, click.y)
+        index = self.grid.get_index(pos)
+
+        if index is None:
+            return
+
+        self.grid.set_tile(index, Tile.Wall)
+        self.draw_grid()
+
+    def end_button(self, click):
+        pos = self.cursor_location(click.x, click.y)
+        index = self.grid.get_index(pos)
+        if index is None:
+            return
+        
+        tile = self.grid.get_tile(index)
+        if tile == Tile.Wall:
+            return
+        
+        if self.start is None:
+            self.start = pos
+        elif self.end is None:
+            self.end = pos
+        else:
+            self.start = pos
+            self.end = None
+        self.draw_grid()
     def _setup_right_toolbar(self, frame: Frame) -> None:
-        pass
+        self.tile = Tile.Path
+
+        def set_animating():
+            self.mode = Animating([], [])
+            edit_button.config(state="normal") 
+
+        def act_mode():
+            self.mode = Editing()
+            edit_button.config(state="disabled")
+        
+        def change_tile(selection):
+            if selection == "Path":
+                self.tile = Tile.Path
+            elif selection == "Wall":
+                self.title = Tile.Wall
+
+        solve_button = tk.Button(frame, text= "Solve", command= lambda: print("to do"))
+        solve_button.grid(row=0, column=1, sticky="NSEW")
+        solve_button.config(command=set_animating)
+
+        clear_button = tk.Button(frame, text= "Clear", command= lambda: print("to do no.2"))
+        clear_button.grid(row=0, column=2, sticky= "NSEW")
+
+        edit_button = tk.Button(frame, text= "Edit",command=act_mode, state="disabled")
+        edit_button.grid(row=1, column= 1, sticky= "SEW")
+       
+        path_and_wall_button = tk.StringVar()
+        path_and_wall_button.set("Path")
+
+        options = tk.OptionMenu(frame, path_and_wall_button, "Path", "Wall", command=change_tile)
+        options.grid(row=1, column=2, sticky= "SEW")
+        if path_and_wall_button.get() == "Path":
+            self.tile = (Tile.Path)
+        elif path_and_wall_button.get() == "Wall":
+            self.tile = (Tile.Wall)
+        
+        undo_button  = tk.Button(frame, text="Undo", command=self.undo)
+        undo_button.grid(row=2, column=1)
+
+        redo_button = tk.Button(frame, text="Redo", command=self.redo)
+        redo_button.grid(row=2, column=2, sticky= "sew")
+
+        
 
     def _setup_bottom_toolbar(self, frame: Frame) -> None:
         start_button: Button = Button(frame, text="Start", command=self._start_algorithm)
