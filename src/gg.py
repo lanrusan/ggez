@@ -1,9 +1,13 @@
-from tkinter import Button, Canvas, Frame, Tk
+from tkinter import Button, Canvas, Event, Frame, Tk
 import tkinter as tk
 from tkinter import filedialog
 
 from grid import Grid, Position, Tile
 from solver import AStar, Solver
+
+
+class Viewing:
+    pass
 
 
 class Editing:
@@ -23,7 +27,7 @@ class Finished:
         self.path: list[Position] | None = path
 
 
-type Mode = Editing | Animating | Finished
+type Mode = Viewing | Editing | Animating | Finished
 
 
 class GridGuide:
@@ -50,9 +54,9 @@ class GridGuide:
 
         width = self.grid.width * self.cell_size
         height = self.grid.height * self.cell_size
-        canvas: Canvas = Canvas(self.root, width=width, height=height)
-        canvas.grid(column=0, row=1)
-        self._setup_canvas(canvas)
+        self.canvas: Canvas = Canvas(self.root, width=width, height=height)
+        # canvas.grid(column=0, row=1)
+        self._setup_canvas()
 
     def _setup_top_toolbar(self, frame: Frame) -> None:
         def import_file() -> None:
@@ -111,5 +115,5 @@ class GridGuide:
         print("Reset animation")
         self.mode = Editing()
 
-    def _setup_canvas(self, canvas: Canvas) -> None:
+    def _setup_canvas(self) -> None:
         pass

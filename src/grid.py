@@ -20,6 +20,14 @@ class Tile(Enum):
     Wall = 0
     Path = 1
 
+    @property
+    def cost(self) -> int | None:
+        match self:
+            case Tile.Wall:
+                return None
+            case Tile.Path:
+                return 10
+
     @classmethod
     def from_int(cls, num: int) -> Tile:
         tiles = list(cls)
@@ -59,9 +67,9 @@ class Grid:
         self._tiles[index] = tile
 
     def neighbors(self, position: Position) -> Iterator[Position]:
-        directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         neighbors = (
-            self._get_neighbor(position, direction) for direction in directions
+            self._get_neighbor(position, direction)
+            for direction in self.distance_kind.value
         )
         iter = (neighbor for neighbor in neighbors if isinstance(neighbor, Position))
         return iter
