@@ -183,7 +183,7 @@ class GridGuide:
             if selection == "Path":
                 self.tile = Tile.Path
             elif selection == "Wall":
-                self.title = Tile.Wall
+                self.tile = Tile.Wall
 
         solve_button = tk.Button(frame, text= "Solve", command= lambda: print("to do"))
         solve_button.grid(row=0, column=1, sticky="NSEW")
