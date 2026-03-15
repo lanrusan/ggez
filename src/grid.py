@@ -54,6 +54,10 @@ class Grid:
         self._tiles: list[Tile] = [default_tile for _ in range(width * height)]
         self.distance_kind: DistanceKind = DistanceKind.MANHATTAN
 
+    def fill(self, fill: Tile) -> None:
+        for i in range(len(self._tiles)):
+            self._tiles[i] = fill
+
     def get_index(self, position: Position) -> int | None:
         if position.x >= self.width or position.y >= self.height:
             return None
