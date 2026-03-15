@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from tkinter import Button, Canvas, Event, Frame, OptionMenu, StringVar, Tk, Widget
+from tkinter import Canvas, Event, StringVar, Tk, filedialog
 import tkinter as tk
-from tkinter import filedialog
-from turtle import width
+from tkinter.ttk import Button, Frame, OptionMenu
+from tkinter import ttk
 
 from grid import Grid, Position, Tile
 from solver import AStar, Solver
@@ -11,7 +13,9 @@ from solver import AStar, Solver
 PATH_NODE_COLOR = "white"
 WALL_NODE_COLOR = "black"
 START_NODE_COLOR = "#6ae83c"
-END_NODE_COLOR = "#f7ef07"
+END_NODE_COLOR = "red"
+VISITED_NODES_COLOR = "blue"
+FINAL_PATH_COLOR = "gold"
 
 
 @dataclass
@@ -31,15 +35,27 @@ class Animate:
     visited_index: int = 0
     path_index: int = 0
 
+    def dirty(self) -> Dirty:
+        return Dirty(self.visited, self.path, self.visited_index, self.path_index)
 
-type Mode = View | Edit | Animate
+
+@dataclass
+class Dirty:
+    visited: list[Position]
+    path: list[Position] | None
+    visited_index: int = 0
+    path_index: int = 0
+
+
+type Mode = View | Edit | Animate | Dirty
 
 
 class GridGuide:
     def __init__(
-        self, root: Tk, width: int = 20, height: int = 20, cell_size: int = 25
+        self, root: Tk, width: int = 30, height: int = 30, cell_size: int = 25
     ) -> None:
         self.root: Tk = root
+        ttk.Style(root).theme_use("clam")
         self.cell_size: int = cell_size
         self.grid: Grid = Grid(width, height, Tile.Path)
         self.solver: Solver = AStar()
@@ -49,11 +65,11 @@ class GridGuide:
         self.end_node: Position | None = None
         self.tile: Tile = Tile.Wall
         self.animation_id: str | None = None
-        self.animation_speed: int = 50
+        self.animation_speed: int = 30
         self.widgets: list[Button | OptionMenu] = []
 
-        self.undo_stack = []
-        self.redo_stack = []
+        # self.undo_stack = []
+        # self.redo_stack = []
 
         self.root.resizable(False, False)
 
@@ -69,27 +85,20 @@ class GridGuide:
         bottom_toolbar_frame.grid(column=0, row=2, sticky="sw")
         self._setup_bottom_toolbar(bottom_toolbar_frame)
 
-        width = self.grid.width * self.cell_size
-        height = self.grid.height * self.cell_size
-        self.canvas: Canvas = Canvas(self.root, width=width, height=height)
-        self.canvas.grid(column=0, row=1)
-        # TODO: Newtype to dict[tile_index, rect_id]
-        self.rectangles: list[int] = [0] * ((self.grid.width * self.grid.height) + 1)
-        self._setup_canvas()
+        self.setup_canvas()
 
         self.mode_changed()
 
         _ = self.canvas.bind("<Button-1>", self.handle_left_click)
         _ = self.canvas.bind("<B1-Motion>", self.handle_left_drag)
         _ = self.canvas.bind("<Button-3>", self.handle_right_click)
-        # self.canvas.bind("<B1-Motion>", self.wall_drag)
 
     @property
     def mode(self) -> Mode:
         return self._mode
 
     @mode.setter
-    def mode(self, mode: Mode):
+    def mode(self, mode: Mode) -> None:
         self._mode = mode
         self.mode_changed()
 
@@ -99,7 +108,14 @@ class GridGuide:
             with open(file_name) as f:
                 data = f.read()
                 grid = Grid.from_str(data)
-                self.grid = grid
+
+                self.root.destroy()
+                root = Tk()
+                root.title("Grid Guide")
+                app = GridGuide(root, grid.width, grid.height)
+                app.grid = grid
+                app.render_grid_state()
+                app.root.mainloop()
 
         def export_file() -> None:
             file_name = filedialog.asksaveasfilename()
@@ -115,7 +131,7 @@ class GridGuide:
         )
 
         for widget in [self.import_button, self.export_button]:
-            widget.pack(side=tk.LEFT, padx=2, pady=2)
+            widget.pack(side=tk.LEFT, padx=4, pady=4)
             self.widgets.append(widget)
 
     # def save_stat(self):
@@ -148,14 +164,21 @@ class GridGuide:
     #     self.restore_state(state)
     #
 
-    def cursor_location(self, x: int, y: int):
+    def cursor_location(self, x: int, y: int) -> Position:
         x_pos = x // self.cell_size
         y_pos = y // self.cell_size
 
         return Position(x_pos, y_pos)
 
-    def paint_tile(self, event: Event):
+    def paint_tile(self, event: Event) -> None:
         pos = self.cursor_location(event.x, event.y)
+        if (
+            pos.x >= self.grid.width
+            or pos.y >= self.grid.height
+            or pos.x < 0
+            or pos.y < 0
+        ):
+            return
 
         if self.start_node == pos or self.end_node == pos:
             return
@@ -168,28 +191,41 @@ class GridGuide:
         self.grid.set_tile(index, self.tile)
         self.render_tile(index)
 
-    def handle_left_click(self, event: Event):
+    def handle_left_click(self, event: Event) -> None:
         match self.mode:
             case Edit():
+                self.paint_tile(event)
+            case Dirty():
+                self.mode = Edit()
+                self.render_grid_state()
                 self.paint_tile(event)
             case _:
                 pass
 
-    def handle_left_drag(self, event: Event):
+    def handle_left_drag(self, event: Event) -> None:
         match self.mode:
             case Edit():
+                self.paint_tile(event)
+            case Dirty():
+                self.mode = Edit()
+                self.render_grid_state()
                 self.paint_tile(event)
             case _:
                 pass
 
-    def handle_right_click(self, event: Event):
+    def handle_right_click(self, event: Event) -> None:
         match self.mode:
             case Edit():
+                self.place_endpoints(event)
+            case Dirty():
+                self.mode = Edit()
+                self.render_grid_state()
                 self.place_endpoints(event)
             case _:
                 pass
 
-    def place_endpoints(self, event: Event):
+    def place_endpoints(self, event: Event) -> None:
+        _ = self.start_button.config(state="disabled")
         pos = self.cursor_location(event.x, event.y)
         index = self.grid.get_index(pos)
         if index is None:
@@ -209,14 +245,22 @@ class GridGuide:
             self.clear_endpoint(pos)
             return
 
-        if self.start_node is None:
-            self.start_node = pos
-        elif self.end_node is None:
-            self.end_node = pos
-            _ = self.start_button.config(state="active")
-        else:
-            self.clear_endpoint(self.end_node)
-            self.end_node = pos
+        match self.start_node, self.end_node:
+            case Position(), Position():
+                self.clear_endpoint(self.end_node)
+                self.end_node = pos
+                _ = self.start_button.config(state="active")
+                _ = self.forward_button.config(state="active")
+            case Position(), None:
+                self.end_node = pos
+                _ = self.start_button.config(state="active")
+                _ = self.forward_button.config(state="active")
+            case None, Position():
+                self.start_node = pos
+                _ = self.start_button.config(state="active")
+                _ = self.forward_button.config(state="active")
+            case None, None:
+                self.start_node = pos
 
         self.render_endpoints()
 
@@ -236,7 +280,7 @@ class GridGuide:
             self.end_node = None
             self.render_grid_state()
 
-        self.clear_button: Button = tk.Button(frame, text="Clear", command=clear_all)
+        self.clear_button: Button = Button(frame, text="Clear", command=clear_all)
         self.edit_button: Button = Button(
             frame,
             text="Edit",
@@ -248,16 +292,16 @@ class GridGuide:
             command=lambda: set_mode(View()),
         )
 
-        select_tile_var: StringVar = tk.StringVar()
+        select_tile_var: StringVar = StringVar()
         select_tile_var.set("Wall")
 
         self.select_tile_button: OptionMenu = OptionMenu(
             frame, select_tile_var, "Path", "Wall", command=change_tile
         )
-        _ = self.select_tile_button.config(width=3)
+        _ = self.select_tile_button.config(width=4)
 
-        self.undo_button: Button = tk.Button(frame, text="Undo", command=lambda: ())
-        self.redo_button: Button = tk.Button(frame, text="Redo", command=lambda: ())
+        # self.undo_button: Button = Button(frame, text="Undo", command=lambda: ())
+        # self.redo_button: Button = Button(frame, text="Redo", command=lambda: ())
 
         for i, widget in enumerate(
             [
@@ -265,36 +309,51 @@ class GridGuide:
                 self.view_button,
                 self.clear_button,
                 self.select_tile_button,
-                self.undo_button,
-                self.redo_button,
+                # self.undo_button,
+                # self.redo_button,
             ]
         ):
             if i % 2 == 0:
-                widget.grid(row=i // 2, column=0, padx=2, pady=2)
+                widget.grid(row=i // 2, column=0, padx=4, pady=4)
             else:
-                widget.grid(row=i // 2, column=1, padx=2, pady=2)
+                widget.grid(row=i // 2, column=1, padx=4, pady=4)
             self.widgets.append(widget)
 
-    # fmt: off
     def _setup_bottom_toolbar(self, frame: Frame) -> None:
-        self.start_button: Button = Button(frame, text="Start", command=self.start_animation)
-        self.pause_button: Button = Button(frame, text="Pause", command=self.pause_animation)
-        self.stop_button: Button = Button(frame, text="Stop", command=self.stop_animation)
-        self.step_button: Button = Button(frame, text="Step", command=self.step_animation)
-        self.reset_button: Button = Button(frame, text="Reset", command=self.reset_animation)
+        self.start_button: Button = Button(
+            frame, text="Start", command=self.start_animation
+        )
+        self.pause_continue_button: Button = Button(
+            frame, text="Pause", command=self.pause_continue_animation
+        )
+        _ = self.pause_continue_button.config(width=5)
+        self.stop_button: Button = Button(
+            frame, text="Stop", command=self.stop_animation
+        )
+        self.forward_button: Button = Button(
+            frame, text="Forward", command=self.step_forward_animation
+        )
+        self.backward_button: Button = Button(
+            frame, text="Backward", command=self.step_backward_animation
+        )
 
         for widget in [
             self.start_button,
-            self.pause_button,
+            self.pause_continue_button,
             self.stop_button,
-            self.step_button,
-            self.reset_button,
+            self.forward_button,
+            self.backward_button,
         ]:
-            widget.pack(side=tk.LEFT, padx=2, pady=2)
+            widget.pack(side=tk.LEFT, padx=4, pady=4)
             self.widgets.append(widget)
 
+    def setup_canvas(self) -> None:
+        width = self.grid.width * self.cell_size
+        height = self.grid.height * self.cell_size
+        self.canvas: Canvas = Canvas(self.root, width=width, height=height)
+        self.canvas.grid(column=0, row=1)
+        self.rectangles: list[int] = [0] * ((self.grid.width * self.grid.height) + 1)
 
-    def _setup_canvas(self) -> None:
         for r in range(self.grid.width):
             for c in range(self.grid.height):
                 x1 = c * self.cell_size
@@ -311,31 +370,6 @@ class GridGuide:
 
         self.render_grid_state()
 
-    def start_animation(self) -> None:
-        self.render_grid_state()
-
-        if self.start_node is not None and self.end_node is not None:
-            result = self.solver.solve(self.grid, self.start_node, self.end_node)
-            self.mode = Animate(result.visited, result.path)
-            self.animate_nodes(self.mode)
-
-
-    def pause_animation(self) -> None:
-        raise NotImplementedError
-
-    def stop_animation(self) -> None:
-        raise NotImplementedError
-
-    def step_animation(self) -> None:
-        raise NotImplementedError
-
-    def reset_animation(self) -> None:
-        raise NotImplementedError
-
-    def disable_buttons(self) -> None:
-        for widget in self.widgets:
-            _ =widget.config(state="disabled")
-
     def mode_changed(self) -> None:
         self.disable_buttons()
 
@@ -344,16 +378,97 @@ class GridGuide:
                 _ = self.edit_button.config(state="active")
                 _ = self.import_button.config(state="active")
                 _ = self.export_button.config(state="active")
-            case Edit():
+            case Edit() | Dirty():
                 _ = self.view_button.config(state="active")
                 _ = self.clear_button.config(state="active")
                 _ = self.select_tile_button.config(state="active")
-                
+
                 if self.start_node is not None and self.end_node is not None:
                     _ = self.start_button.config(state="active")
-
+                    _ = self.forward_button.config(state="active")
             case Animate():
+                _ = self.pause_continue_button.config(state="active")
+                _ = self.stop_button.config(state="active")
+                _ = self.forward_button.config(state="active")
+                _ = self.backward_button.config(state="active")
                 pass
+
+    def start_animation(self) -> None:
+        self.render_grid_state()
+
+        if self.start_node is not None and self.end_node is not None:
+            result = self.solver.solve(self.grid, self.start_node, self.end_node)
+            self.mode = Animate(result.visited, result.path)
+            _ = self.forward_button.config(state="disabled")
+            _ = self.backward_button.config(state="disabled")
+            self.animate_nodes(self.mode)
+
+    def pause_continue_animation(self) -> None:
+        if self.animation_id is None:
+            match self.mode:
+                case Animate():
+                    self.animate_nodes(self.mode)
+                case _:
+                    if self.start_node is not None and self.end_node is not None:
+                        result = self.solver.solve(
+                            self.grid, self.start_node, self.end_node
+                        )
+                        self.mode = Animate(result.visited, result.path)
+                        self.animate_nodes(self.mode)
+
+            _ = self.pause_continue_button.config(text="Pause")
+            return
+
+        _ = self.backward_button.config(state="active")
+        _ = self.forward_button.config(state="active")
+        _ = self.pause_continue_button.config(text="Continue")
+        self.cancel_animation()
+
+    def stop_animation(self) -> None:
+        match self.mode:
+            case Animate():
+                if self.animation_id is None:
+                    self.mode = self.mode.dirty()
+                    _ = self.pause_continue_button.config(text="Pause")
+
+                    return
+
+                self.cancel_animation()
+                self.mode = self.mode.dirty()
+            case _:
+                pass
+
+    def step_forward_animation(self) -> None:
+        match self.mode:
+            case Animate():
+                self.step_forward_node(self.mode)
+            case _:
+                self.render_grid_state()
+                if self.start_node is not None and self.end_node is not None:
+                    result = self.solver.solve(
+                        self.grid, self.start_node, self.end_node
+                    )
+                    self.mode = Animate(result.visited, result.path)
+                    self.step_forward_node(self.mode)
+                    _ = self.pause_continue_button.config(text="Continue")
+
+    def step_backward_animation(self) -> None:
+        match self.mode:
+            case Animate():
+                self.step_backward_node(self.mode)
+            case _:
+                self.render_grid_state()
+                if self.start_node is not None and self.end_node is not None:
+                    result = self.solver.solve(
+                        self.grid, self.start_node, self.end_node
+                    )
+                    self.mode = Animate(result.visited, result.path)
+                    self.step_backward_node(self.mode)
+                    _ = self.pause_continue_button.config(text="Continue")
+
+    def disable_buttons(self) -> None:
+        for widget in self.widgets:
+            _ = widget.config(state="disabled")
 
     def clear_endpoint(self, position: Position) -> None:
         index = position.x + position.y * self.grid.width
@@ -363,20 +478,16 @@ class GridGuide:
         match self.start_node:
             case Position(x, y):
                 start_index = x + y * self.grid.width
-
-                _ = self.canvas.itemconfig(self.rectangles[start_index], fill=START_NODE_COLOR)
+                self.draw_rectangle(start_index, START_NODE_COLOR)
             case _:
                 pass
 
         match self.end_node:
             case Position(x, y):
                 end_index = x + y * self.grid.width
-
-                _ = self.canvas.itemconfig(self.rectangles[end_index], fill=END_NODE_COLOR)
+                self.draw_rectangle(end_index, END_NODE_COLOR)
             case _:
                 pass
-
-
 
     def render_tile(
         self,
@@ -385,10 +496,13 @@ class GridGuide:
         if index in self.rectangles:
             match self.grid.get_tile(index):
                 case Tile.Path:
-                    color = PATH_NODE_COLOR
+                    _ = self.canvas.itemconfig(
+                        self.rectangles[index], fill=PATH_NODE_COLOR, outline="darkgray"
+                    )
                 case Tile.Wall:
-                    color = WALL_NODE_COLOR
-            _ = self.canvas.itemconfig(self.rectangles[index], fill=color)
+                    _ = self.canvas.itemconfig(
+                        self.rectangles[index], fill=WALL_NODE_COLOR, outline=""
+                    )
 
     def render_grid_state(self):
         for r in range(self.grid.height):
@@ -402,7 +516,7 @@ class GridGuide:
         if mode.visited_index < len(mode.visited):
             position = mode.visited[mode.visited_index]
             index = position.x + position.y * self.grid.width
-            _ = self.canvas.itemconfig(self.rectangles[index], fill="#3498db")
+            self.draw_rectangle(index, VISITED_NODES_COLOR)
 
             mode.visited_index += 1
             self.animation_id = self.root.after(
@@ -411,11 +525,62 @@ class GridGuide:
         elif mode.path is not None and mode.path_index < len(mode.path):
             position = mode.path[mode.path_index]
             index = position.x + position.y * self.grid.width
-            _ = self.canvas.itemconfig(self.rectangles[index], fill="#f1c40f")
+            self.draw_rectangle(index, FINAL_PATH_COLOR)
 
             mode.path_index += 1
             self.animation_id = self.root.after(
-                self.animation_speed, self.animate_nodes, mode
+                self.animation_speed - 10, self.animate_nodes, mode
             )
         else:
+            self.mode = mode.dirty()
+
+    def step_forward_node(self, mode: Animate):
+        if mode.visited_index < len(mode.visited):
+            position = mode.visited[mode.visited_index]
+            index = position.x + position.y * self.grid.width
+            self.draw_rectangle(index, VISITED_NODES_COLOR)
+
+            mode.visited_index += 1
+        elif mode.path is not None and mode.path_index < len(mode.path):
+            position = mode.path[mode.path_index]
+            index = position.x + position.y * self.grid.width
+            self.draw_rectangle(index, FINAL_PATH_COLOR)
+
+            mode.path_index += 1
+        else:
+            self.mode = mode.dirty()
+
+    def step_backward_node(self, mode: Animate):
+        if mode.path is not None and mode.path_index > 0:
+            mode.path_index -= 1
+
+            position = mode.path[mode.path_index]
+            index = position.x + position.y * self.grid.width
+            self.render_tile(index)
+
+        elif mode.visited_index > 0:
+            mode.visited_index -= 1
+
+            position = mode.visited[mode.visited_index]
+            index = position.x + position.y * self.grid.width
+
+            if mode.visited_index == 0:
+                self.draw_rectangle(index, START_NODE_COLOR)
+            elif mode.visited_index == len(mode.visited) - 1:
+                self.draw_rectangle(index, END_NODE_COLOR)
+            else:
+                self.render_tile(index)
+
+        else:
+            self.render_endpoints()
             self.mode = Edit()
+
+    def draw_rectangle(self, index: int, color: str) -> None:
+        _ = self.canvas.itemconfig(self.rectangles[index], fill=color, outline="")
+
+    def cancel_animation(self):
+        if self.animation_id is None:
+            return
+
+        self.root.after_cancel(self.animation_id)
+        self.animation_id = None
