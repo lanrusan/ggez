@@ -296,7 +296,7 @@ class GridGuide:
         select_tile_var.set("Wall")
 
         self.select_tile_button: OptionMenu = OptionMenu(
-            frame, select_tile_var, "Path", "Wall", command=change_tile
+            frame, select_tile_var, "Wall", "Wall", "Path", command=change_tile
         )
         _ = self.select_tile_button.config(width=4)
 
@@ -326,7 +326,7 @@ class GridGuide:
         self.pause_continue_button: Button = Button(
             frame, text="Pause", command=self.pause_continue_animation
         )
-        _ = self.pause_continue_button.config(width=5)
+        _ = self.pause_continue_button.config(width=8)
         self.stop_button: Button = Button(
             frame, text="Stop", command=self.stop_animation
         )
@@ -392,6 +392,9 @@ class GridGuide:
                 _ = self.forward_button.config(state="active")
                 _ = self.backward_button.config(state="active")
                 pass
+
+        # if isinstance(self.mode, Dirty):
+        #     _ = self.backward_button.config(state="active")
 
     def start_animation(self) -> None:
         self.render_grid_state()
@@ -556,7 +559,8 @@ class GridGuide:
 
             position = mode.path[mode.path_index]
             index = position.x + position.y * self.grid.width
-            self.render_tile(index)
+
+            self.draw_rectangle(index, VISITED_NODES_COLOR)
 
         elif mode.visited_index > 0:
             mode.visited_index -= 1
