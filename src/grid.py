@@ -42,9 +42,9 @@ class MapImportError(Exception):
         super().__init__(*args)
 
 
-class DistanceKind(Enum):
-    MANHATTAN = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-    EUCLIDEAN = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, -1), (1, -1)]
+class Neighbors(Enum):
+    FOUR = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    EIGHT = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, -1), (1, -1)]
 
 
 class Grid:
@@ -52,7 +52,7 @@ class Grid:
         self.width: int = width
         self.height: int = height
         self._tiles: list[Tile] = [default_tile for _ in range(width * height)]
-        self.distance_kind: DistanceKind = DistanceKind.MANHATTAN
+        self.neighbor_kind: Neighbors = Neighbors.FOUR
 
     def fill(self, fill: Tile) -> None:
         for i in range(len(self._tiles)):
@@ -73,7 +73,7 @@ class Grid:
     def neighbors(self, position: Position) -> Iterator[Position]:
         neighbors = (
             self._get_neighbor(position, direction)
-            for direction in self.distance_kind.value
+            for direction in self.neighbor_kind.value
         )
         iter = (neighbor for neighbor in neighbors if isinstance(neighbor, Position))
         return iter
